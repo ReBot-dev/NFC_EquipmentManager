@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 # 認証
 try:
-    gc = gspread.service_account(filename=r"replace google service json file location")
+    gc = gspread.service_account(filename=r"replace_with_your_service_account_json_file.json")
     spreadsheet = gc.open("Equipment_Manager")
 except Exception as e:
     sg.popup_error(f"認証に失敗しました。プログラムを終了します。\nAuthentication failed. Exiting program.\n\n{e}")
@@ -19,7 +19,7 @@ def read_nfc_id():
     GET_UID_COMMAND = [0xFF, 0xCA, 0x00, 0x00, 0x00]
     """NFCカードを最大10回まで検知を試みる。"""
     for i in range(10):
-        sg.popup_no_buttons(f"カードをタッチしてください...\nPlease touch your card...", non_blocking=True, auto_close=True, auto_close_duration=1)
+        sg.popup_no_buttons(f"タッチしてください...\nPlease touch NFC item...", non_blocking=True, auto_close=True, auto_close_duration=1)
         try:
             r = readers()
             if len(r) == 0:
@@ -84,6 +84,8 @@ def register_employee(idm, name, email):
 def register_item(idm, item_name):
     """新しい物品をスプレッドシートに登録する"""
     try:
+		#wip tourokutyuuni hyouji
+		#sg.popup_no_buttons(f"ただいま登録中です…\nRegistaring...", non_blocking=True, auto_close=True, auto_close_duration=1)
         worksheet = spreadsheet.worksheet("物品マスタ")
         new_row = [item_name, idm]
         worksheet.append_row(new_row)
@@ -218,12 +220,28 @@ def add_return_record(item_name, borrower_name, scheduled_date):
         new_row = [timestamp, item_name, borrower_name, scheduled_date]
         worksheet.append_row(new_row)
     except Exception as e:
-        sg.popup_error(f"返却履歴の記録エラー: {e}\nError recording return history: {e}")                
+        sg.popup_error(f"返却履歴の記録エラー: {e}\nError recording return history: {e}")
+
+def get_borrowed_list_data():
+    try:
+        worksheet = spreadsheet.worksheet("貸出中一覧")
+        all_data = worksheet.get_all_values()
+        if len(all_data) <= 1:
+            return [["現在、貸出中の物品はありません", "", "", ""]]
+        
+        # 1行目（ヘッダー）を除いたデータ部分を返す
+        return all_data[1:] 
+    except Exception as e:
+        print(f"データ取得エラー: {e}")
+        return [["エラー", "データを取得できませんでした", "", ""]]
 
 # GUIレイアウト定義
 
 # 各画面のレイアウトをsg.Columnで定義
-layout_main = [[sg.Btn("貸出 / 返却 / 登録\nBorrow / Return / Register", size=(25, 3))]]
+layout_main = [
+    [sg.Txt("Tabキーで選択 Spaceで決定\nTab key to select, Space key to enter")],
+    [sg.Btn("貸出 / 返却 / 登録\nBorrow / Return / Register", size=(25, 3))],
+    [sg.Btn("現在の貸出状況一覧を見る\nView Current Borrowed Items", size=(25, 2))]]
 
 layout_register_select = [
     [sg.Txt("未登録のIDです。どちらを登録しますか？\nThis ID is not registered. Which type do you want to register?")],
@@ -256,13 +274,28 @@ layout_calendar = [
     [sg.Button("登録\nRegister")],
 ]
 
+header = ["申請日時", "申請者", "物品名", "返却予定日"]
+layout_view_list = [
+    [sg.Txt("現在の貸出状況一覧 (Current Borrowed Items)")],
+    [sg.Table(values=get_borrowed_list_data(), 
+              headings=header, 
+              auto_size_columns=False,
+              col_widths=[5, 5, 10, 5],
+              justification='left',
+              key='-BORROW_TABLE-',
+              row_height=30,
+              num_rows=10)], # 表示する行数
+    [sg.Btn("最新の情報に更新 (Refresh)"), sg.Btn("メインに戻る")]
+]
+
 # 全てのColumnを一つのレイアウトにまとめる
 layout = [
     [sg.Column(layout_main, key='-VIEW_MAIN-'),
      sg.Column(layout_register_select, visible=False, key='-VIEW_REG_SELECT-'),
      sg.Column(layout_register_employee, visible=False, key='-VIEW_REG_EMP-'),
      sg.Column(layout_register_item, visible=False, key='-VIEW_REG_ITEM-'),
-     sg.Column(layout_calendar, visible=False, key='-VIEW_CALENDAR-')]
+	 sg.Column(layout_calendar, visible=False, key='-VIEW_CALENDAR-'),
+     sg.Column(layout_view_list, visible=False, key='-VIEW_BORROW_LIST-')],
 ]
 
 # ウィンドウ作成とイベントループ
@@ -294,7 +327,7 @@ while True:
                         if check_item_borrowed(item_name):
                             continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
                         sg.popup(f"物品を確認しました: { item_name }\n返却日を登録してください\nI checked the item: { item_name }\nPlease register the return date.")
-                        calendar_date = calendar()
+                        calendar_date = calendar(window)
                         if calendar_date:
                             appllication_submit(employee_name, item_name, calendar_date)
                             return_to_main()
@@ -317,7 +350,7 @@ while True:
                         employee_name = get_employee_name_by_id(employee_idm, employee_ids, E_name)
                         item_name = get_item_name_by_id(idm, item_ids, I_names)
                         sg.popup(f"社員証を確認しました: { employee_name }\n返却日を登録してください\nI checked your employee ID: { employee_name }\nPlease register the return date.")
-                        calendar_date = calendar()
+                        calendar_date = calendar(window)
                         if calendar_date:
                             appllication_submit(employee_name, item_name, calendar_date)
                             return_to_main()
@@ -328,6 +361,16 @@ while True:
                     window['-VIEW_MAIN-'].update(visible=False)
                     window['-VIEW_REG_SELECT-'].update(visible=True)
                     current_view = 'REG_SELECT'
+        if event == "現在の貸出状況一覧を見る\nView Current Borrowed Items":
+            window['-VIEW_MAIN-'].update(visible=False)
+            window['-VIEW_BORROW_LIST-'].update(visible=True)
+            current_view = 'BORROW_LIST'
+    # 貸出状況一覧画面の処理
+    elif current_view == 'BORROW_LIST':
+        if event == "最新の情報に更新 (Refresh)":
+            window['-BORROW_TABLE-'].update(values=get_borrowed_list_data())
+        elif event == "メインに戻る":
+            return_to_main()
 
     # 登録種別選択画面の処理
     elif current_view == 'REG_SELECT':
