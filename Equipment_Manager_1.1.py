@@ -3,7 +3,7 @@ from smartcard.System import readers
 from smartcard.util import toHexString
 from smartcard.Exceptions import NoCardException
 import gspread
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 認証
 try:
@@ -110,25 +110,30 @@ def appllication_submit(employee_name, item_name, calendar_date):
     except Exception as e:
         sg.popup_error(f"申請保存エラー: {e}\nError saving application: {e}")
 
-def calendar():
-    layout = [
-        [sg.CalendarButton("日付を選択\nSelect Date", target='-DATE-', format='%Y-%m-%d')],
-        [sg.Input(key='-DATE-', size=(20, 1))],
-        [sg.Button("登録\nRegister")]
-    ]
-    cal_win = sg.Window("返却日選択\nSelect Return Date", layout)
+def calendar(window):
+    window['-VIEW_MAIN-'].update(visible=False)
+    window['-VIEW_CALENDAR-'].update(visible=True)
+    global current_view
+    current_view = 'CALENDAR'
+
     selected_date = None
     while True:
-        event, values = cal_win.read()
+        event, values = window.read()
         if event in (sg.WIN_CLOSED, None):
             break
+        if event == "今日まで":
+            selected_date = datetime.now().strftime('%Y-%m-%d')
+            window['-DATE-'].update(selected_date)
+        if event == "明日まで":
+            tomorrow = datetime.now() + timedelta(days=1)
+            selected_date = tomorrow.strftime('%Y-%m-%d')
+            window['-DATE-'].update(selected_date)
         if "登録\nRegister" in event:
             if values['-DATE-']:
                 selected_date = values['-DATE-']
                 break
             else:
-                sg.popup_error("日付を選択してください。\nPlease select a date.")
-    cal_win.close()
+                sg.popup_error("日付を入力してください。\nPlease enter a date.")
     return selected_date
 
 def check_employee_borrowed(employee_idm, employee_name):
@@ -241,8 +246,13 @@ layout_register_item = [
 ]
 
 layout_calendar = [
-    [sg.CalendarButton("日付を選択\nSelect date", target='-DATE-', format='%Y-%m-%d')],
-    [sg.Input(key='-DATE-', size=(20, 1))],
+    [sg.Btn("今日まで"), sg.Btn("明日まで")],
+    [sg.Txt("それ以外の場合はカレンダーから選択、または直接入力")],
+    [
+        sg.Input(key='-DATE-', size=(15, 1)),
+        # カレンダーボタンを追加。targetに入力先のキーを指定します。
+        sg.CalendarButton("カレンダーを選択", target='-DATE-', format='%Y-%m-%d', no_titlebar=False)
+    ],
     [sg.Button("登録\nRegister")],
 ]
 
