@@ -235,13 +235,62 @@ def get_borrowed_list_data():
         print(f"データ取得エラー: {e}")
         return [["エラー", "データを取得できませんでした", "", ""]]
 
+def get_returned_list_data():
+    try:
+        worksheet = spreadsheet.worksheet("返却履歴")
+        all_data = worksheet.get_all_values()
+        if len(all_data) <= 1:
+            return [["現在、返却済みの物品はありません", "", "", ""]]
+        
+        # 1行目（ヘッダー）を除いたデータ部分を返す
+        return all_data[1:] 
+    except Exception as e:
+        print(f"データ取得エラー: {e}")
+        return [["エラー", "データを取得できませんでした", "", ""]]
+
+def get_employee_list_data():
+    try:
+        worksheet = spreadsheet.worksheet("社員マスタ")
+        all_data = worksheet.get_all_values()
+        if len(all_data) <= 1:
+            return [["現在、登録されている社員はいません", "", ""]]
+        return [[row[0], row[2]] for row in all_data[1:]]
+    except Exception as e:
+        print(f"データ取得エラー: {e}")
+        return [["エラー", "データを取得できませんでした", ""]]
+
+def get_item_list_data():
+    try:
+        worksheet = spreadsheet.worksheet("物品マスタ")
+        all_data = worksheet.get_all_values()
+        if len(all_data) <= 1:
+            return [["現在、登録されている物品はありません", ""]]
+        return [[row[0], row[2], row[3]] for row in all_data[1:]]
+    except Exception as e:
+        print(f"データ取得エラー: {e}")
+        return [["エラー", "データを取得できませんでした"]]
+
+def bug_list_data():
+    try:
+        worksheet = spreadsheet.worksheet("不具合報告")
+        all_data = worksheet.get_all_values()
+        if len(all_data) <= 1:
+            return [["現在、報告されている不具合はありません", "", "", ""]]
+        return all_data[1:]
+    except Exception as e:
+        print(f"データ取得エラー: {e}")
+        return [["エラー", "データを取得できませんでした", "", ""]]
 # GUIレイアウト定義
 
 # 各画面のレイアウトをsg.Columnで定義
 layout_main = [
     [sg.Txt("Tabキーで選択 Spaceで決定\nTab key to select, Space key to enter")],
     [sg.Btn("貸出 / 返却 / 登録\nBorrow / Return / Register", size=(25, 3))],
-    [sg.Btn("現在の貸出状況一覧を見る\nView Current Borrowed Items", size=(25, 2))]]
+    [sg.Btn("現在の貸出状況一覧を見る\nView Current Borrowed Items", size=(25, 3))],
+    [sg.Btn("返却履歴一覧を見る\nView Returned Items History", size=(25, 3))],
+    [sg.Btn("登録されている社員一覧を見る\nView Registered Employees", size=(25, 3))],
+    [sg.Btn("登録されている物品一覧を見る\nView Registered Items", size=(25, 3))],
+    [sg.Btn("不具合報告一覧を見る\nView Bug Reports", size=(25, 3))],]
 
 layout_register_select = [
     [sg.Txt("未登録のIDです。どちらを登録しますか？\nThis ID is not registered. Which type do you want to register?")],
@@ -275,7 +324,7 @@ layout_calendar = [
 ]
 
 header = ["申請日時", "申請者", "物品名", "返却予定日"]
-layout_view_list = [
+layout_borrow_list = [
     [sg.Txt("現在の貸出状況一覧 (Current Borrowed Items)")],
     [sg.Table(values=get_borrowed_list_data(), 
               headings=header, 
@@ -285,8 +334,67 @@ layout_view_list = [
               key='-BORROW_TABLE-',
               row_height=30,
               num_rows=10)], # 表示する行数
-    [sg.Btn("最新の情報に更新 (Refresh)"), sg.Btn("メインに戻る")]
+    [sg.Btn("最新の情報に更新", key='-REFRESH_BORROW-'), 
+     sg.Btn("メインに戻る", key='-BACK_BORROW-')]
 ]
+
+header = ["返却日時", "物品名", "返却者", "返却予定日"]
+layout_return_list = [
+    [sg.Txt("返却履歴一覧 (Returned Items History)")],
+    [sg.Table(values=get_returned_list_data(), 
+              headings=header, 
+              auto_size_columns=False,
+              col_widths=[10, 10, 5, 5],
+              justification='left',
+              key='-RETURN_TABLE-',
+              row_height=30,
+              num_rows=10)], # 表示する行数
+    [sg.Btn("最新の情報に更新", key='-REFRESH_RETURN-'), 
+     sg.Btn("メインに戻る", key='-BACK_RETURN-')]
+]
+
+header = ["氏名", "eMail(ugo)"]
+layout_employee_list = [
+    [sg.Txt("登録されている社員一覧 (Registered Employees)")],
+    [sg.Table(values=get_employee_list_data(), 
+              headings=header,
+              auto_size_columns=False,
+              col_widths=[10, 20],
+              justification='left',
+              key='-EMPLOYEE_TABLE-',
+              row_height=30,
+              num_rows=10)], # 表示する行数
+    [sg.Btn("メインに戻る", key='-BACK_EMPLOYEE-')]
+]
+
+header = ["物品名", "最終貸出者", "最終貸出日時"]
+layout_item_list = [
+    [sg.Txt("登録されている物品一覧 (Registered Items)")],
+    [sg.Table(values=get_item_list_data(), 
+              headings=header,
+              auto_size_columns=False,
+              col_widths=[15, 10, 10],
+              justification='left',
+              key='-ITEM_TABLE-',
+              row_height=30,
+              num_rows=10)], # 表示する行数
+    [sg.Btn("メインに戻る", key='-BACK_ITEM-')]
+]
+
+header = [ "対応状況", "報告日時", "報告者", "不具合内容"]
+layout_bug_list = [
+    [sg.Txt("不具合報告一覧 (Bug Reports)")],
+    [sg.Table(values=bug_list_data(), 
+              headings=header,
+              auto_size_columns=False,
+              col_widths=[5, 10, 10, 30],
+              justification='left',
+              key='-BUG_TABLE-',
+              row_height=30,
+              num_rows=10)], # 表示する行数
+    [sg.Btn("メインに戻る", key='-BACK_BUG-')]
+]
+
 
 # 全てのColumnを一つのレイアウトにまとめる
 layout = [
@@ -295,7 +403,11 @@ layout = [
      sg.Column(layout_register_employee, visible=False, key='-VIEW_REG_EMP-'),
      sg.Column(layout_register_item, visible=False, key='-VIEW_REG_ITEM-'),
 	 sg.Column(layout_calendar, visible=False, key='-VIEW_CALENDAR-'),
-     sg.Column(layout_view_list, visible=False, key='-VIEW_BORROW_LIST-')],
+     sg.Column(layout_borrow_list, visible=False, key='-VIEW_BORROW_LIST-'),
+     sg.Column(layout_return_list, visible=False, key='-VIEW_RETURN_LIST-'),
+     sg.Column(layout_employee_list, visible=False, key='-VIEW_EMPLOYEE_LIST-'),
+     sg.Column(layout_item_list, visible=False, key='-VIEW_ITEM_LIST-'),
+     sg.Column(layout_bug_list, visible=False, key='-VIEW_BUG_LIST-')],
 ]
 
 # ウィンドウ作成とイベントループ
@@ -365,12 +477,47 @@ while True:
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_BORROW_LIST-'].update(visible=True)
             current_view = 'BORROW_LIST'
+        if event == "返却履歴一覧を見る\nView Returned Items History":
+            window['-VIEW_MAIN-'].update(visible=False)
+            window['-VIEW_RETURN_LIST-'].update(visible=True)
+            current_view = 'RETURN_LIST'
+        if event == "登録されている社員一覧を見る\nView Registered Employees":
+            window['-VIEW_MAIN-'].update(visible=False)
+            window['-VIEW_EMPLOYEE_LIST-'].update(visible=True)
+            current_view = 'EMPLOYEE_LIST'
+        if event == "登録されている物品一覧を見る\nView Registered Items":
+            window['-VIEW_MAIN-'].update(visible=False)
+            window['-VIEW_ITEM_LIST-'].update(visible=True)
+            current_view = 'ITEM_LIST'
+        if event == "不具合報告一覧を見る\nView Bug Reports":
+            window['-VIEW_MAIN-'].update(visible=False)
+            window['-VIEW_BUG_LIST-'].update(visible=True)
+            current_view = 'BUG_LIST'
     # 貸出状況一覧画面の処理
     elif current_view == 'BORROW_LIST':
-        if event == "最新の情報に更新 (Refresh)":
+        if event == "-REFRESH_BORROW-":
             window['-BORROW_TABLE-'].update(values=get_borrowed_list_data())
-        elif event == "メインに戻る":
+        elif event == "-BACK_BORROW-":
             return_to_main()
+    # 返却履歴一覧画面の処理
+    elif current_view == 'RETURN_LIST':
+        if event == "-REFRESH_RETURN-":
+            window['-RETURN_TABLE-'].update(values=get_returned_list_data())
+        elif event == "-BACK_RETURN-":
+            return_to_main()
+    # 社員一覧画面の処理
+    elif current_view == 'EMPLOYEE_LIST':
+        if event == "-BACK_EMPLOYEE-":
+            return_to_main()
+    # 物品一覧画面の処理
+    elif current_view == 'ITEM_LIST':
+        if event == "-BACK_ITEM-":
+            return_to_main()
+    # 不具合報告一覧画面の処理
+    elif current_view == 'BUG_LIST':
+        if event == "-BACK_BUG-":
+            return_to_main()
+    
 
     # 登録種別選択画面の処理
     elif current_view == 'REG_SELECT':
