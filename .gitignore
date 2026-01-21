@@ -1,0 +1,11 @@
+node_modules/
+.log/
+.clasp.json
+.vscode/
+*git rm --cached .test.txt.swp.swp/
+
+#development_codes
+DM_no_use.js
+ID_no_use.js
+testdm.js
+command_list.js

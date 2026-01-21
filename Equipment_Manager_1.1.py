@@ -1,0 +1,359 @@
+import FreeSimpleGUI as sg
+from smartcard.System import readers
+from smartcard.util import toHexString
+from smartcard.Exceptions import NoCardException
+import gspread
+from datetime import datetime
+
+# 認証
+try:
+    gc = gspread.service_account(filename=r"replace google service json file location")
+    spreadsheet = gc.open("Equipment_Manager")
+except Exception as e:
+    sg.popup_error(f"認証に失敗しました。プログラムを終了します。\nAuthentication failed. Exiting program.\n\n{e}")
+    exit()
+
+# 関数定義
+
+def read_nfc_id():
+    GET_UID_COMMAND = [0xFF, 0xCA, 0x00, 0x00, 0x00]
+    """NFCカードを最大10回まで検知を試みる。"""
+    for i in range(10):
+        sg.popup_no_buttons(f"カードをタッチしてください...\nPlease touch your card...", non_blocking=True, auto_close=True, auto_close_duration=1)
+        try:
+            r = readers()
+            if len(r) == 0:
+                sg.popup_error("カードリーダーが見つかりません。\nCard reader not found.")
+                return None
+            reader = r[0]
+            connection = reader.createConnection()
+            try:
+                connection.connect()
+                data, sw1, sw2 = connection.transmit(GET_UID_COMMAND)
+                # 処理が成功したかチェック (0x90 0x00 は成功を意味する)
+                if sw1 == 0x90 and sw2 == 0x00:
+                # バイトデータを16進数文字列に変換
+                    idm = toHexString(data)
+                    return idm
+            except Exception:
+                import time
+                time.sleep(1)
+        except Exception as e:
+            sg.popup_error(f"NFCリーダーエラー: {e}\nNFC reader error: {e}")
+            return None
+    sg.popup_error("カードが検知できませんでした。\nCard not detected.")
+    return None
+
+def get_employee_name_by_id(idm, employee_ids, employee_list):
+    if idm in employee_ids:
+        idx = employee_ids.index(idm)
+        return employee_list[idx]
+    return None
+
+def get_item_name_by_id(idm, item_ids, item_name_list):
+    if idm in item_ids:
+        idx = item_ids.index(idm)
+        return item_name_list[idx]
+    return None
+
+def get_all_ids():
+    try:
+        # 社員マスタからIDと氏名を取得（ヘッダー除く全データ）
+        employee_sheet = spreadsheet.worksheet("社員マスタ")
+        employee_ids = employee_sheet.col_values(2)[1:]  # 2列目（IDm）
+        employee_list = employee_sheet.col_values(1)[1:]  # 1列目（氏名）
+        # 物品マスタからIDと物品名を取得
+        item_sheet = spreadsheet.worksheet("物品マスタ")
+        item_ids = item_sheet.col_values(2)[1:]  # 2列目（IDm）
+        item_name_list = item_sheet.col_values(1)[1:]  # 1列目（物品名）
+        return employee_ids, item_ids, employee_list, item_name_list
+    except Exception as e:
+        sg.popup_error(f"IDリストの取得エラー: {e}\nError retrieving ID lists: {e}")
+        return [], [], [], []
+
+def register_employee(idm, name, email):
+    """新しい社員をスプレッドシートに登録する"""
+    try:
+        worksheet = spreadsheet.worksheet("社員マスタ")
+        new_row = [name, idm, email]
+        worksheet.append_row(new_row)
+        sg.popup("社員証の登録が完了しました。\nEmployee card registration completed.")
+    except Exception as e:
+        sg.popup_error(f"社員登録エラー: {e}\nError registering employee: {e}")
+
+def register_item(idm, item_name):
+    """新しい物品をスプレッドシートに登録する"""
+    try:
+        worksheet = spreadsheet.worksheet("物品マスタ")
+        new_row = [item_name, idm]
+        worksheet.append_row(new_row)
+        sg.popup("物品の登録が完了しました。\nItem registration completed.")
+    except Exception as e:
+        sg.popup_error(f"物品登録エラー: {e}\nError registering item: {e}")
+
+def appllication_submit(employee_name, item_name, calendar_date):
+    """申請内容をスプレッドシートに保存する"""
+    try:
+        worksheet = spreadsheet.worksheet("貸出中一覧")
+        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_row = [str(today),str(employee_name), str(item_name), str(calendar_date)]
+        worksheet.append_row(new_row)
+
+        worksheet_master = spreadsheet.worksheet("物品マスタ")
+        cell = worksheet_master.find(item_name, in_column=1)
+        if cell:
+            worksheet_master.update_cell(cell.row, 3, employee_name)
+            worksheet_master.update_cell(cell.row, 4, today)
+
+        sg.popup(f"登録が終了しました。\n申請者:{employee_name}\n物品:{item_name}\n返却日:{calendar_date}\n\nRegistration completed.\nApplicant: {employee_name}\nItem: {item_name}\nReturn Date: {calendar_date}")
+        return_to_main()
+    except Exception as e:
+        sg.popup_error(f"申請保存エラー: {e}\nError saving application: {e}")
+
+def calendar():
+    layout = [
+        [sg.CalendarButton("日付を選択\nSelect Date", target='-DATE-', format='%Y-%m-%d')],
+        [sg.Input(key='-DATE-', size=(20, 1))],
+        [sg.Button("登録\nRegister")]
+    ]
+    cal_win = sg.Window("返却日選択\nSelect Return Date", layout)
+    selected_date = None
+    while True:
+        event, values = cal_win.read()
+        if event in (sg.WIN_CLOSED, None):
+            break
+        if "登録\nRegister" in event:
+            if values['-DATE-']:
+                selected_date = values['-DATE-']
+                break
+            else:
+                sg.popup_error("日付を選択してください。\nPlease select a date.")
+    cal_win.close()
+    return selected_date
+
+def check_employee_borrowed(employee_idm, employee_name):
+    try:
+        worksheet = spreadsheet.worksheet("貸出中一覧")
+        all_data = worksheet.get_all_records()
+        borrowed_list = []
+        for row in all_data:
+            if row.get('申請者', '') == employee_name:
+                borrowed_list.append(row)
+        if borrowed_list:
+            msg = f"{employee_name}さんが現在借りている物品一覧:\nYour borrowed items:\n"
+            for info in borrowed_list:
+                item_name = info.get('物品名', '')
+                calendar_date = info.get('返却予定日', '')
+                msg += f"\n・物品: {item_name}\n・返却日: {calendar_date}\n"
+            result = sg.popup_yes_no(msg + "\n返却の場合は、初めに物品をタッチしてください。\n追加で貸出登録しますか？\nIf you are returning an item, please touch the item first. \nWould you like to register an additional item for loan?")
+            if result == "Yes":
+                return False
+            else:
+                return_to_main()
+                return True
+    except Exception as e:
+        sg.popup_error(f"貸出確認エラー: {e}\nError checking borrowings: {e}")
+        return_to_main()
+        return True
+
+def check_item_borrowed(item_name):
+    try:
+        worksheet = spreadsheet.worksheet("貸出中一覧")
+        all_data = worksheet.get_all_records()
+        borrowed_info = None
+        for row in all_data:
+            if row['物品名'] == item_name:
+                borrowed_info = row
+                break
+        if borrowed_info:
+            employee_name = borrowed_info.get('申請者', '')
+            calendar_date = borrowed_info.get('返却予定日', '')
+            borrower_name = borrowed_info.get('申請者', '')
+            scheduled_date = borrowed_info.get('返却予定日', '')
+            msg = (f"{item_name}は既に貸出中です。返却しますか？\n{item_name} is currently borrowed. Return it?\n\n"
+                    f"[持ち出し情報]\n申請者:{employee_name}\n物品:{item_name}\n返却日:{calendar_date}")
+            result = sg.popup_yes_no(msg)
+            if result == "Yes":
+                return_item(item_name, borrower_name, scheduled_date)
+                sg.popup(f"{item_name}の返却が完了しました。借りる場合はもう一度貸出登録をしてください。\n\n{item_name} return completed. Please register again if you want to borrow it.")
+                return_to_main()
+                return True  # 返却した
+            elif result == "No":
+                return True  # 返却しなかった
+        return_to_main()
+        return False  # 返却しなかった
+    except Exception as e:
+        sg.popup_error(f"貸出確認エラー: {e}\nError checking borrowings: {e}")
+        return_to_main()
+        return True  # エラー時もスキップ
+
+def return_item(item_name, borrower_name, scheduled_date):
+    """スキャンしたアイテムを貸出中一覧から削除する"""
+    try:
+        add_return_record(item_name, borrower_name, scheduled_date)  # 返却履歴に追加
+        worksheet = spreadsheet.worksheet("貸出中一覧")
+        cell = worksheet.find(item_name, in_column=3)
+        if cell:
+            worksheet.delete_rows(cell.row)
+    except Exception as e:
+        sg.popup_error(f"返却処理エラー: {e}\nError during return processing: {e}")
+
+
+def return_to_main():
+    """メインメニューに戻る"""
+    global current_view
+    window[f'-VIEW_{current_view}-'].update(visible=False)
+    window['-VIEW_MAIN-'].update(visible=True)
+    current_view = 'MAIN'
+
+def add_return_record(item_name, borrower_name, scheduled_date):
+    try:
+        worksheet = spreadsheet.worksheet("返却履歴")
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_row = [timestamp, item_name, borrower_name, scheduled_date]
+        worksheet.append_row(new_row)
+    except Exception as e:
+        sg.popup_error(f"返却履歴の記録エラー: {e}\nError recording return history: {e}")                
+
+# GUIレイアウト定義
+
+# 各画面のレイアウトをsg.Columnで定義
+layout_main = [[sg.Btn("貸出 / 返却 / 登録\nBorrow / Return / Register", size=(25, 3))]]
+
+layout_register_select = [
+    [sg.Txt("未登録のIDです。どちらを登録しますか？\nThis ID is not registered. Which type do you want to register?")],
+    [sg.Btn("社員証として登録\nRegister as employee card"), sg.Btn("物品として登録\nRegister as Item")],
+]
+
+layout_register_employee = [
+    [sg.Txt("新しい社員証を登録します。\nRegister a new employee card.")],
+    [sg.Txt("IDm:", size=(8,1)), sg.Txt("", key='-EMP_REG_IDM-')],
+    [sg.Txt("Your name:", size=(8,1)), sg.In(key='-EMP_REG_NAME-')],
+    [sg.Txt("eMail(ugo):", size=(8,1)), sg.In(key='-EMP_REG_EMAIL-')],
+    [sg.Btn("この内容で登録\nRegister with this information")],
+]
+
+layout_register_item = [
+    [sg.Txt("新しい物品を登録します。\nRegister a new item.")],
+    [sg.Txt("IDm:", size=(8,1)), sg.Txt("", key='-ITEM_REG_IDM-')],
+    [sg.Txt("Item name:", size=(8,1)), sg.In(key='-ITEM_REG_NAME-')],
+    [sg.Btn("この内容で登録\nRegister with this information")],
+]
+
+layout_calendar = [
+    [sg.CalendarButton("日付を選択\nSelect date", target='-DATE-', format='%Y-%m-%d')],
+    [sg.Input(key='-DATE-', size=(20, 1))],
+    [sg.Button("登録\nRegister")],
+]
+
+# 全てのColumnを一つのレイアウトにまとめる
+layout = [
+    [sg.Column(layout_main, key='-VIEW_MAIN-'),
+     sg.Column(layout_register_select, visible=False, key='-VIEW_REG_SELECT-'),
+     sg.Column(layout_register_employee, visible=False, key='-VIEW_REG_EMP-'),
+     sg.Column(layout_register_item, visible=False, key='-VIEW_REG_ITEM-'),
+     sg.Column(layout_calendar, visible=False, key='-VIEW_CALENDAR-')]
+]
+
+# ウィンドウ作成とイベントループ
+window = sg.Window("Equipment Manager", layout)
+current_view = 'MAIN'
+unregistered_idm = None
+
+while True: 
+    event, values = window.read()
+    if event == sg.WIN_CLOSED:
+        break
+
+    # メイン画面の処理
+    if current_view == 'MAIN':
+        if event == "貸出 / 返却 / 登録\nBorrow / Return / Register":
+            idm = read_nfc_id()
+            if idm:
+                employee_ids, item_ids, E_name, I_names = get_all_ids()
+                employee_name = get_employee_name_by_id(idm, employee_ids, E_name)
+                item_name = get_item_name_by_id(idm, item_ids, I_names)
+                if idm in employee_ids:
+                    if check_employee_borrowed(idm, employee_name):
+                        continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
+                    sg.popup(f"社員証を確認しました: { employee_name }\n借りる物品をタッチしてください。\nI checked your employee ID:{ employee_name }\nPlease touch the item you want to borrow.")
+                    item_idm = read_nfc_id()  # 物品のIDを読み取る
+                    employee_name = get_employee_name_by_id(idm, employee_ids, E_name)
+                    item_name = get_item_name_by_id(item_idm, item_ids, I_names)
+                    if item_idm in item_ids:
+                        if check_item_borrowed(item_name):
+                            continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
+                        sg.popup(f"物品を確認しました: { item_name }\n返却日を登録してください\nI checked the item: { item_name }\nPlease register the return date.")
+                        calendar_date = calendar()
+                        if calendar_date:
+                            appllication_submit(employee_name, item_name, calendar_date)
+                            return_to_main()
+                    elif idm in employee_ids:
+                        sg.popup(f"Error:社員証をタッチしています。物品のタッチを行ってください。\nError: You are touching the employee ID. Please touch the item.")
+                    else:
+                        unregistered_idm = idm
+                        window['-VIEW_MAIN-'].update(visible=False)
+                        window['-VIEW_REG_SELECT-'].update(visible=True)
+                        current_view = 'REG_SELECT'
+
+                elif idm in item_ids:
+                    if check_item_borrowed(item_name):
+                        continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
+                    sg.popup(f"物品を確認しました: { item_name }\n社員証をタッチしてください。\nI checked the item: { item_name }\nPlease touch your employee ID.")
+                    employee_idm = read_nfc_id()
+                    employee_name = get_employee_name_by_id(employee_idm, employee_ids, E_name)
+                    item_name = get_item_name_by_id(idm, item_ids, I_names)
+                    if employee_idm in employee_ids:
+                        employee_name = get_employee_name_by_id(employee_idm, employee_ids, E_name)
+                        item_name = get_item_name_by_id(idm, item_ids, I_names)
+                        sg.popup(f"社員証を確認しました: { employee_name }\n返却日を登録してください\nI checked your employee ID: { employee_name }\nPlease register the return date.")
+                        calendar_date = calendar()
+                        if calendar_date:
+                            appllication_submit(employee_name, item_name, calendar_date)
+                            return_to_main()
+                    elif idm in item_ids:
+                        sg.popup(f"Error:物品をタッチしています。社員証のタッチを行ってください。\nError: You are touching the item. Please touch your employee ID.")
+                else:
+                    unregistered_idm = idm
+                    window['-VIEW_MAIN-'].update(visible=False)
+                    window['-VIEW_REG_SELECT-'].update(visible=True)
+                    current_view = 'REG_SELECT'
+
+    # 登録種別選択画面の処理
+    elif current_view == 'REG_SELECT':
+        if event == "社員証として登録\nRegister as employee card":
+            window['-VIEW_REG_SELECT-'].update(visible=False)
+            window['-VIEW_REG_EMP-'].update(visible=True)
+            window['-EMP_REG_IDM-'].update(unregistered_idm) # IDmを表示
+            current_view = 'REG_EMP'
+        elif event == "物品として登録\nRegister as Item":
+            window['-VIEW_REG_SELECT-'].update(visible=False)
+            window['-VIEW_REG_ITEM-'].update(visible=True)
+            window['-ITEM_REG_IDM-'].update(unregistered_idm) # IDmを表示
+            current_view = 'REG_ITEM'
+
+    # 社員証登録画面の処理
+    elif current_view == 'REG_EMP':
+        if "この内容で登録\nRegister" in event:
+            name = values['-EMP_REG_NAME-']
+            email = values['-EMP_REG_EMAIL-']
+            if name and email:
+                register_employee(unregistered_idm, name, email)
+                # メインメニューに戻る
+                window['-VIEW_REG_EMP-'].update(visible=False)
+                window['-VIEW_MAIN-'].update(visible=True)
+                current_view = 'MAIN'
+            else:
+                sg.popup_error("氏名とメールアドレスを入力してください。\nPlease enter your name and email address.")
+
+    # 物品登録画面の処理
+    elif current_view == 'REG_ITEM':
+        if "この内容で登録\nRegister" in event:
+            item_name = values['-ITEM_REG_NAME-']
+            if item_name:
+                register_item(unregistered_idm, item_name)
+                return_to_main() 
+            else:
+                sg.popup_error("物品名を入力してください。\nPlease enter the item name.")
+
+window.close()
