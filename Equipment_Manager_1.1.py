@@ -117,6 +117,7 @@ def calendar(window):
     window['-VIEW_CALENDAR-'].update(visible=True)
     global current_view
     current_view = 'CALENDAR'
+    window["今日まで"].set_focus()
 
     selected_date = None
     while True:
@@ -212,6 +213,7 @@ def return_to_main():
     window[f'-VIEW_{current_view}-'].update(visible=False)
     window['-VIEW_MAIN-'].update(visible=True)
     current_view = 'MAIN'
+    window["貸出 / 返却 / 登録\nBorrow / Return / Register"].set_focus()
 
 def add_return_record(item_name, borrower_name, scheduled_date):
     try:
@@ -281,6 +283,23 @@ def bug_list_data():
         print(f"データ取得エラー: {e}")
         return [["エラー", "データを取得できませんでした", "", ""]]
 # GUIレイアウト定義
+
+FOCUS_MAP = {
+    'MAIN': [
+        "貸出 / 返却 / 登録\nBorrow / Return / Register", 
+        "現在の貸出状況一覧を見る\nView Current Borrowed Items", 
+        "返却履歴一覧を見る\nView Returned Items History",
+        "登録されている社員一覧を見る\nView Registered Employees",
+        "登録されている物品一覧を見る\nView Registered Items",
+        "不具合報告一覧を見る\nView Bug Reports"
+    ],
+    'CALENDAR': ["今日まで", "明日まで", "-DATE-", "登録\nRegister"],
+    'BORROW_LIST': ["-REFRESH_BORROW-", "-BACK_BORROW-"],
+    'RETURN_LIST': ["-REFRESH_RETURN-", "-BACK_RETURN-"],
+    'EMPLOYEE_LIST': ["-BACK_EMPLOYEE-"],
+    'ITEM_LIST': ["-BACK_ITEM-"],
+    'BUG_LIST': ["-BACK_BUG-"]
+}
 
 # 各画面のレイアウトをsg.Columnで定義
 layout_main = [
@@ -411,14 +430,40 @@ layout = [
 ]
 
 # ウィンドウ作成とイベントループ
-window = sg.Window("Equipment Manager", layout)
+window = sg.Window("Equipment Manager", layout, finalize=True, return_keyboard_events=True)
 current_view = 'MAIN'
 unregistered_idm = None
+
+window.bind("<Return>", "-ENTER-")
 
 while True: 
     event, values = window.read()
     if event == sg.WIN_CLOSED:
         break
+
+    # 1. Enterキーの処理
+    if event == "-ENTER-":
+        focused_element = window.find_element_with_focus()
+        if focused_element:
+            # 現在のボタンのキーをイベントとして上書きして、下のif文たちに流す
+            event = focused_element.key if focused_element.key else focused_element.get_text()
+
+    # 2. 矢印キーの処理
+    if event in ("Up", "Down", "Left", "Right") or event.startswith("Up:") or event.startswith("Down:"):
+        current_keys = FOCUS_MAP.get(current_view, [])
+        if current_keys:
+            focused_element = window.find_element_with_focus()
+            current_key = focused_element.key if focused_element else None
+            
+            try:
+                idx = current_keys.index(current_key) if current_key in current_keys else 0
+                if event in ("Down", "Right") or "40" in event or "39" in event:
+                    next_idx = (idx + 1) % len(current_keys)
+                else:
+                    next_idx = (idx - 1) % len(current_keys)
+                window[current_keys[next_idx]].set_focus()
+            except:
+                window[current_keys[0]].set_focus()
 
     # メイン画面の処理
     if current_view == 'MAIN':
@@ -517,7 +562,6 @@ while True:
     elif current_view == 'BUG_LIST':
         if event == "-BACK_BUG-":
             return_to_main()
-    
 
     # 登録種別選択画面の処理
     elif current_view == 'REG_SELECT':
