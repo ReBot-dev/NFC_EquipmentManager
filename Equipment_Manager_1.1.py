@@ -139,7 +139,7 @@ def calendar(window):
                 sg.popup_error("日付を入力してください。\nPlease enter a date.")
     return selected_date
 
-def check_employee_borrowed(employee_idm, employee_name):
+def check_employee_borrowed(second_idm, employee_name):
     try:
         worksheet = spreadsheet.worksheet("貸出中一覧")
         all_data = worksheet.get_all_records()
@@ -231,7 +231,7 @@ def get_borrowed_list_data():
         if len(all_data) <= 1:
             return [["現在、貸出中の物品はありません", "", "", ""]]
         
-        # 1行目（ヘッダー）を除いたデータ部分を返す
+        # 1行目を除く
         return all_data[1:] 
     except Exception as e:
         print(f"データ取得エラー: {e}")
@@ -244,7 +244,7 @@ def get_returned_list_data():
         if len(all_data) <= 1:
             return [["現在、返却済みの物品はありません", "", "", ""]]
         
-        # 1行目（ヘッダー）を除いたデータ部分を返す
+        # 1行目を除く
         return all_data[1:] 
     except Exception as e:
         print(f"データ取得エラー: {e}")
@@ -293,6 +293,12 @@ FOCUS_MAP = {
         "登録されている物品一覧を見る\nView Registered Items",
         "不具合報告一覧を見る\nView Bug Reports"
     ],
+    'VIEW_REG_SELECT': [
+        "社員証として登録\nRegister as employee card",
+        "物品として登録\nRegister as Item"
+    ],
+    'REG_EMP': ["この内容で登録\nRegister with this information"],
+    'REG_ITEM': ["この内容で登録\nRegister with this information"],
     'CALENDAR': ["今日まで", "明日まで", "-DATE-", "登録\nRegister"],
     'BORROW_LIST': ["-REFRESH_BORROW-", "-BACK_BORROW-"],
     'RETURN_LIST': ["-REFRESH_RETURN-", "-BACK_RETURN-"],
@@ -313,7 +319,7 @@ layout_main = [
 
 layout_register_select = [
     [sg.Txt("未登録のIDです。どちらを登録しますか？\nThis ID is not registered. Which type do you want to register?")],
-    [sg.Btn("社員証として登録\nRegister as employee card"), sg.Btn("物品として登録\nRegister as Item")],
+    [sg.Btn("社員証として登録\nRegister as employee card", size=(25, 3)), sg.Btn("物品として登録\nRegister as Item",size=(15, 3))],
 ]
 
 layout_register_employee = [
@@ -449,7 +455,7 @@ while True:
             event = focused_element.key if focused_element.key else focused_element.get_text()
 
     # 2. 矢印キーの処理
-    if event in ("Up", "Down", "Left", "Right") or event.startswith("Up:") or event.startswith("Down:"):
+    if event in ("Up", "Down", "Left", "Right") or any(event.startswith(k) for k in ["Up", "Down", "Left", "Right"]):  # 116:Down, 111:Up, 113:Left, 114:Right
         current_keys = FOCUS_MAP.get(current_view, [])
         if current_keys:
             focused_element = window.find_element_with_focus()
@@ -457,12 +463,12 @@ while True:
             
             try:
                 idx = current_keys.index(current_key) if current_key in current_keys else 0
-                if event in ("Down", "Right") or "40" in event or "39" in event:
+                if event in ("Down", "Right") or "116" in event or "114" in event:
                     next_idx = (idx + 1) % len(current_keys)
                 else:
                     next_idx = (idx - 1) % len(current_keys)
                 window[current_keys[next_idx]].set_focus()
-            except:
+            except: 
                 window[current_keys[0]].set_focus()
 
     # メイン画面の処理
@@ -477,10 +483,10 @@ while True:
                     if check_employee_borrowed(idm, employee_name):
                         continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
                     sg.popup(f"社員証を確認しました: { employee_name }\n借りる物品をタッチしてください。\nI checked your employee ID:{ employee_name }\nPlease touch the item you want to borrow.")
-                    item_idm = read_nfc_id()  # 物品のIDを読み取る
+                    second_idm = read_nfc_id()  # 物品のIDを読み取る
                     employee_name = get_employee_name_by_id(idm, employee_ids, E_name)
-                    item_name = get_item_name_by_id(item_idm, item_ids, I_names)
-                    if item_idm in item_ids:
+                    item_name = get_item_name_by_id(second_idm, item_ids, I_names)
+                    if second_idm in item_ids:
                         if check_item_borrowed(item_name):
                             continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
                         sg.popup(f"物品を確認しました: { item_name }\n返却日を登録してください\nI checked the item: { item_name }\nPlease register the return date.")
@@ -488,31 +494,37 @@ while True:
                         if calendar_date:
                             appllication_submit(employee_name, item_name, calendar_date)
                             return_to_main()
-                    elif idm in employee_ids:
+                    elif second_idm in employee_ids:
                         sg.popup(f"Error:社員証をタッチしています。物品のタッチを行ってください。\nError: You are touching the employee ID. Please touch the item.")
                     else:
                         unregistered_idm = idm
                         window['-VIEW_MAIN-'].update(visible=False)
                         window['-VIEW_REG_SELECT-'].update(visible=True)
                         current_view = 'REG_SELECT'
+                    
 
                 elif idm in item_ids:
                     if check_item_borrowed(item_name):
                         continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
                     sg.popup(f"物品を確認しました: { item_name }\n社員証をタッチしてください。\nI checked the item: { item_name }\nPlease touch your employee ID.")
-                    employee_idm = read_nfc_id()
-                    employee_name = get_employee_name_by_id(employee_idm, employee_ids, E_name)
+                    second_idm = read_nfc_id()
+                    employee_name = get_employee_name_by_id(second_idm, employee_ids, E_name)
                     item_name = get_item_name_by_id(idm, item_ids, I_names)
-                    if employee_idm in employee_ids:
-                        employee_name = get_employee_name_by_id(employee_idm, employee_ids, E_name)
+                    if second_idm in employee_ids:
+                        employee_name = get_employee_name_by_id(second_idm, employee_ids, E_name)
                         item_name = get_item_name_by_id(idm, item_ids, I_names)
                         sg.popup(f"社員証を確認しました: { employee_name }\n返却日を登録してください\nI checked your employee ID: { employee_name }\nPlease register the return date.")
                         calendar_date = calendar(window)
                         if calendar_date:
                             appllication_submit(employee_name, item_name, calendar_date)
                             return_to_main()
-                    elif idm in item_ids:
+                    elif second_idm in item_ids:
                         sg.popup(f"Error:物品をタッチしています。社員証のタッチを行ってください。\nError: You are touching the item. Please touch your employee ID.")
+                    else:
+                        unregistered_idm = idm
+                        window['-VIEW_MAIN-'].update(visible=False)
+                        window['-VIEW_REG_SELECT-'].update(visible=True)
+                        current_view = 'REG_SELECT'
                 else:
                     unregistered_idm = idm
                     window['-VIEW_MAIN-'].update(visible=False)
@@ -562,6 +574,7 @@ while True:
     elif current_view == 'BUG_LIST':
         if event == "-BACK_BUG-":
             return_to_main()
+    
 
     # 登録種別選択画面の処理
     elif current_view == 'REG_SELECT':
