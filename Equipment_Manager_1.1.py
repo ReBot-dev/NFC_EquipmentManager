@@ -112,6 +112,17 @@ def appllication_submit(employee_name, item_name, calendar_date):
     except Exception as e:
         custom_popup_ok(f"申請保存エラー: {e}\nError saving application: {e}")
 
+def application_submit_bug(reporter_name, bug_description):
+    try:
+        worksheet = spreadsheet.worksheet("不具合報告")
+        today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_row = ["未対応", str(today), str(reporter_name), str(bug_description)]
+        worksheet.append_row(new_row)
+        custom_popup_ok("不具合報告が完了しました。ご協力ありがとうございます。\nBug report submitted. Thank you for your cooperation.")
+        return_to_main()
+    except Exception as e:
+        custom_popup_ok(f"不具合報告エラー: {e}\nError reporting bug: {e}")
+
 def calendar(window):
     window['-VIEW_MAIN-'].update(visible=False)
     window['-VIEW_CALENDAR-'].update(visible=True)
@@ -233,7 +244,9 @@ def get_borrowed_list_data():
             return [["現在、貸出中の物品はありません", "", "", ""]]
         
         # 1行目を除く
-        return all_data[1:] 
+        data = all_data[1:]
+        data.reverse()
+        return data
     except Exception as e:
         print(f"データ取得エラー: {e}")
         return [["エラー", "データを取得できませんでした", "", ""]]
@@ -246,7 +259,9 @@ def get_returned_list_data():
             return [["現在、返却済みの物品はありません", "", "", ""]]
         
         # 1行目を除く
-        return all_data[1:] 
+        data = all_data[1:] 
+        data.reverse()
+        return data
     except Exception as e:
         print(f"データ取得エラー: {e}")
         return [["エラー", "データを取得できませんでした", "", ""]]
@@ -279,7 +294,9 @@ def bug_list_data():
         all_data = worksheet.get_all_values()
         if len(all_data) <= 1:
             return [["現在、報告されている不具合はありません", "", "", ""]]
-        return all_data[1:]
+        data = all_data[1:]
+        data.reverse()
+        return data
     except Exception as e:
         print(f"データ取得エラー: {e}")
         return [["エラー", "データを取得できませんでした", "", ""]]
@@ -394,9 +411,9 @@ FOCUS_MAP = {
     'MAIN': [
         "貸出 / 返却 / 登録\nBorrow / Return / Register", 
         "貸出状況一覧を見る\nView Current Borrowed Items", 
+        "登録されている物品一覧を見る\nView Registered Items",
         "返却履歴一覧を見る\nView Returned Items History",
         "登録されている社員一覧を見る\nView Registered Employees",
-        "登録されている物品一覧を見る\nView Registered Items",
         "不具合報告一覧を見る\nView Bug Reports"
     ],
     'REG_SELECT': [  # VIEW_ を取って現在の状態名に合わせる
@@ -406,23 +423,22 @@ FOCUS_MAP = {
     'REG_EMP': ['-EMP_REG_NAME-', '-EMP_REG_EMAIL-', "この内容で登録\nRegister with this information"], # 入力欄も追加
     'REG_ITEM': ['-ITEM_REG_NAME-', "この内容で登録\nRegister with this information"], # 入力欄も追加
     'CALENDAR': ["今日まで\nUntil Today", "明日まで\nUntil Tomorrow", "-DATE-", "カレンダーを選択\nSelect from Calendar", "登録\nRegister"],
-    'BORROW_LIST': ["-REFRESH_BORROW-", "-BACK_BORROW-"],
-    'RETURN_LIST': ["-REFRESH_RETURN-", "-BACK_RETURN-"],
+    'BORROW_LIST': ["-BACK_BORROW-"],
+    'RETURN_LIST': ["-BACK_RETURN-"],
     'EMPLOYEE_LIST': ["-BACK_EMPLOYEE-"],
     'ITEM_LIST': ["-BACK_ITEM-"],
-    'BUG_LIST': ["-BACK_BUG-"],
+    'BUG_LIST': ["-BACK_BUG-", '-BUG_REPORTER-', '-BUG_DESCRIPTION-', "-SUBMIT_BUG-"],
     'POPUP_YESNO': ["はい\nYes", "いいえ\nNo"],
     'POPUP_OK': ["了解\nOK"],
 }
 
 # 各画面のレイアウトをsg.Columnで定義
 layout_main = [
-    [sg.Txt("Tabキーで選択 Spaceで決定\nTab key to select, Space key to enter")],
     [sg.Btn("貸出 / 返却 / 登録\nBorrow / Return / Register", size=(25, 3))],
     [sg.Btn("貸出状況一覧を見る\nView Current Borrowed Items", size=(25, 3))],
+    [sg.Btn("登録されている物品一覧を見る\nView Registered Items", size=(25, 3))],
     [sg.Btn("返却履歴一覧を見る\nView Returned Items History", size=(25, 3))],
     [sg.Btn("登録されている社員一覧を見る\nView Registered Employees", size=(25, 3))],
-    [sg.Btn("登録されている物品一覧を見る\nView Registered Items", size=(25, 3))],
     [sg.Btn("不具合報告一覧を見る\nView Bug Reports", size=(25, 3))],]
 
 layout_register_select = [
@@ -455,7 +471,7 @@ layout_calendar = [
     [sg.Button("登録\nRegister", size=(10, 2))],
 ]
 
-header = ["申請日時", "申請者", "物品名", "返却予定日"]
+header = ["申請日時(Application Date)", "申請者(Applicant)", "物品名(Item Name)", "返却予定日(Scheduled Return Date)"]
 layout_borrow_list = [
     [sg.Txt("現在の貸出状況一覧 (Current Borrowed Items)")],
     [sg.Table(values=get_borrowed_list_data(), 
@@ -466,11 +482,10 @@ layout_borrow_list = [
               key='-BORROW_TABLE-',
               row_height=30,
               num_rows=10)], # 表示する行数
-    [sg.Btn("最新の情報に更新", key='-REFRESH_BORROW-'), 
-     sg.Btn("メインに戻る", key='-BACK_BORROW-')]
+    [sg.Btn("メインに戻る", key='-BACK_BORROW-')]
 ]
 
-header = ["返却日時", "物品名", "返却者", "返却予定日"]
+header = ["返却日時(Return Date)", "物品名(Item Name)", "返却者(Returner)", "予定返却日(Scheduled Return Date)"]
 layout_return_list = [
     [sg.Txt("返却履歴一覧 (Returned Items History)")],
     [sg.Table(values=get_returned_list_data(), 
@@ -481,11 +496,10 @@ layout_return_list = [
               key='-RETURN_TABLE-',
               row_height=30,
               num_rows=10)], # 表示する行数
-    [sg.Btn("最新の情報に更新", key='-REFRESH_RETURN-'), 
-     sg.Btn("メインに戻る", key='-BACK_RETURN-')]
+    [sg.Btn("メインに戻る", key='-BACK_RETURN-')]
 ]
 
-header = ["氏名", "eMail(ugo)"]
+header = ["氏名(Name)", "eMail(ugo)"]
 layout_employee_list = [
     [sg.Txt("登録されている社員一覧 (Registered Employees)")],
     [sg.Table(values=get_employee_list_data(), 
@@ -499,7 +513,7 @@ layout_employee_list = [
     [sg.Btn("メインに戻る", key='-BACK_EMPLOYEE-')]
 ]
 
-header = ["物品名", "最終貸出者", "最終貸出日時"]
+header = ["物品名(Item Name)", "現在の貸出者(Current Borrower)", "最終貸出日時(Last Borrowed Date)"]
 layout_item_list = [
     [sg.Txt("登録されている物品一覧 (Registered Items)")],
     [sg.Table(values=get_item_list_data(), 
@@ -513,7 +527,7 @@ layout_item_list = [
     [sg.Btn("メインに戻る", key='-BACK_ITEM-')]
 ]
 
-header = [ "対応状況", "報告日時", "報告者", "不具合内容"]
+header = [ "対応状況(Status)", "報告日時(Report Date)", "報告者(Reporter)", "不具合内容(Bug Description)"]
 layout_bug_list = [
     [sg.Txt("不具合報告一覧 (Bug Reports)")],
     [sg.Table(values=bug_list_data(), 
@@ -524,7 +538,11 @@ layout_bug_list = [
               key='-BUG_TABLE-',
               row_height=30,
               num_rows=10)], # 表示する行数
-    [sg.Btn("メインに戻る", key='-BACK_BUG-')]
+    [sg.Btn("メインに戻る\nReturn to Main", size=(15,2), key='-BACK_BUG-')],
+    [sg.Txt("名前(Your Name):"), sg.In(key='-BUG_REPORTER-', size=(20,1))],
+    [sg.Txt("不具合内容(Bug Description):")],
+    [sg.Multiline(key='-BUG_DESCRIPTION-', size=(60,5))],
+    [sg.Btn("不具合報告を送信\nSubmit Bug Report", size=(20,2), key='-SUBMIT_BUG-')]
 ]
 
 layout = [[sg.Txt("", key='-POPUP_MSG-', font=('Helvetica', 12))],
@@ -559,11 +577,19 @@ current_view = 'MAIN'
 unregistered_idm = None
 
 window.bind("<Return>", "-ENTER-")
+window.bind("<Escape>", "-ESCAPE-")
+
 
 while True: 
     event, values = window.read(timeout=10)
     if event == sg.WIN_CLOSED:
         break
+    
+    # ESCキーでメインメニューに戻る
+    if event in "-ESCAPE-":
+        if current_view != 'MAIN':
+            return_to_main()
+        continue
     
     event = handle_common_events(event) #文字の色変更とキー操作
 
@@ -629,10 +655,12 @@ while True:
         if event == "貸出状況一覧を見る\nView Current Borrowed Items":
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_BORROW_LIST-'].update(visible=True)
+            window['-BORROW_TABLE-'].update(values=get_borrowed_list_data())
             current_view = 'BORROW_LIST'
         if event == "返却履歴一覧を見る\nView Returned Items History":
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_RETURN_LIST-'].update(visible=True)
+            window['-RETURN_TABLE-'].update(values=get_returned_list_data())
             current_view = 'RETURN_LIST'
         if event == "登録されている社員一覧を見る\nView Registered Employees":
             window['-VIEW_MAIN-'].update(visible=False)
@@ -645,18 +673,15 @@ while True:
         if event == "不具合報告一覧を見る\nView Bug Reports":
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_BUG_LIST-'].update(visible=True)
+            window['-BUG_TABLE-'].update(values=bug_list_data())
             current_view = 'BUG_LIST'
     # 貸出状況一覧画面の処理
     elif current_view == 'BORROW_LIST':
-        if event == "-REFRESH_BORROW-":
-            window['-BORROW_TABLE-'].update(values=get_borrowed_list_data())
-        elif event == "-BACK_BORROW-":
+        if event == "-BACK_BORROW-":
             return_to_main()
     # 返却履歴一覧画面の処理
     elif current_view == 'RETURN_LIST':
-        if event == "-REFRESH_RETURN-":
-            window['-RETURN_TABLE-'].update(values=get_returned_list_data())
-        elif event == "-BACK_RETURN-":
+        if event == "-BACK_RETURN-":
             return_to_main()
     # 社員一覧画面の処理
     elif current_view == 'EMPLOYEE_LIST':
@@ -670,6 +695,16 @@ while True:
     elif current_view == 'BUG_LIST':
         if event == "-BACK_BUG-":
             return_to_main()
+        elif event == "-SUBMIT_BUG-":
+            reporter_name = values['-BUG_REPORTER-']
+            bug_description = values['-BUG_DESCRIPTION-']
+            if reporter_name and bug_description:
+                application_submit_bug(reporter_name, bug_description)
+                # フォームをクリア
+                window['-BUG_REPORTER-'].update('')
+                window['-BUG_DESCRIPTION-'].update('')
+            else:
+                custom_popup_ok("名前と不具合内容を入力してください。\nPlease enter your name and bug description.")
     
 
     # 登録種別選択画面の処理
