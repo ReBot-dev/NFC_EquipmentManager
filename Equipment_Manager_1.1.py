@@ -287,18 +287,18 @@ def bug_list_data():
 FOCUS_MAP = {
     'MAIN': [
         "貸出 / 返却 / 登録\nBorrow / Return / Register", 
-        "現在の貸出状況一覧を見る\nView Current Borrowed Items", 
+        "貸出状況一覧を見る\nView Current Borrowed Items", 
         "返却履歴一覧を見る\nView Returned Items History",
         "登録されている社員一覧を見る\nView Registered Employees",
         "登録されている物品一覧を見る\nView Registered Items",
         "不具合報告一覧を見る\nView Bug Reports"
     ],
-    'VIEW_REG_SELECT': [
+    'REG_SELECT': [  # VIEW_ を取って現在の状態名に合わせる
         "社員証として登録\nRegister as employee card",
         "物品として登録\nRegister as Item"
     ],
-    'REG_EMP': ["この内容で登録\nRegister with this information"],
-    'REG_ITEM': ["この内容で登録\nRegister with this information"],
+    'REG_EMP': ['-EMP_REG_NAME-', '-EMP_REG_EMAIL-', "この内容で登録\nRegister with this information"], # 入力欄も追加
+    'REG_ITEM': ['-ITEM_REG_NAME-', "この内容で登録\nRegister with this information"], # 入力欄も追加
     'CALENDAR': ["今日まで", "明日まで", "-DATE-", "登録\nRegister"],
     'BORROW_LIST': ["-REFRESH_BORROW-", "-BACK_BORROW-"],
     'RETURN_LIST': ["-REFRESH_RETURN-", "-BACK_RETURN-"],
@@ -311,7 +311,7 @@ FOCUS_MAP = {
 layout_main = [
     [sg.Txt("Tabキーで選択 Spaceで決定\nTab key to select, Space key to enter")],
     [sg.Btn("貸出 / 返却 / 登録\nBorrow / Return / Register", size=(25, 3))],
-    [sg.Btn("現在の貸出状況一覧を見る\nView Current Borrowed Items", size=(25, 3))],
+    [sg.Btn("貸出状況一覧を見る\nView Current Borrowed Items", size=(25, 3))],
     [sg.Btn("返却履歴一覧を見る\nView Returned Items History", size=(25, 3))],
     [sg.Btn("登録されている社員一覧を見る\nView Registered Employees", size=(25, 3))],
     [sg.Btn("登録されている物品一覧を見る\nView Registered Items", size=(25, 3))],
@@ -443,9 +443,47 @@ unregistered_idm = None
 window.bind("<Return>", "-ENTER-")
 
 while True: 
-    event, values = window.read()
+    event, values = window.read(timeout=10)
     if event == sg.WIN_CLOSED:
         break
+    
+    target_keys = ['貸出 / 返却 / 登録\nBorrow / Return / Register',
+                   '貸出状況一覧を見る\nView Current Borrowed Items',
+                     '返却履歴一覧を見る\nView Returned Items History',
+                        '登録されている社員一覧を見る\nView Registered Employees',
+                            '登録されている物品一覧を見る\nView Registered Items',
+                              '不具合報告一覧を見る\nView Bug Reports',
+                              '社員証として登録\nRegister as employee card',
+                              '物品として登録\nRegister as Item',
+                              'この内容で登録\nRegister with this information',
+                              '今日まで',
+                              '明日まで',
+                              '-DATE-',
+                              '登録\nRegister',
+                              '-REFRESH_BORROW-',
+                              '-BACK_BORROW-',
+                              '-REFRESH_RETURN-',
+                              '-BACK_RETURN-',
+                              '-BACK_EMPLOYEE-',
+                              '-BACK_ITEM-',
+                              '-BACK_BUG-']
+
+    focused_element = window.find_element_with_focus()
+    
+    for key in target_keys:
+        if key not in window.AllKeysDict or isinstance(window[key], sg.Table):
+            continue
+        element = window[key]
+        if focused_element == element:
+            if isinstance(element, sg.Button):
+                element.update(button_color=('black', 'lightgreen'))
+            else:
+                element.update(background_color='lightgreen')
+        else:
+            if isinstance(element, sg.Button):
+                element.update(button_color=sg.theme_button_color())
+            else:
+                element.update(background_color='white')
 
     # 1. Enterキーの処理
     if event == "-ENTER-":
@@ -530,7 +568,7 @@ while True:
                     window['-VIEW_MAIN-'].update(visible=False)
                     window['-VIEW_REG_SELECT-'].update(visible=True)
                     current_view = 'REG_SELECT'
-        if event == "現在の貸出状況一覧を見る\nView Current Borrowed Items":
+        if event == "貸出状況一覧を見る\nView Current Borrowed Items":
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_BORROW_LIST-'].update(visible=True)
             current_view = 'BORROW_LIST'
