@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 # 認証
 try:
-    gc = gspread.service_account(filename=r"replace_with_your_service_account_json_file")
+    gc = gspread.service_account(filename=r"replace_with_your_service_account_json_file.json")
     spreadsheet = gc.open("Equipment_Manager")
 except Exception as e:
     custom_popup_ok(f"認証に失敗しました。プログラムを終了します。\nAuthentication failed. Exiting program.\n\n{e}")
@@ -284,9 +284,15 @@ def bug_list_data():
         print(f"データ取得エラー: {e}")
         return [["エラー", "データを取得できませんでした", "", ""]]
 
-def handle_common_events(event):
-    #Enter,Focus時に色を変える
-    global current_view
+last_view = None
+def handle_common_events(event): #Enter,Focus時に色を変える
+    global current_view, last_view
+    if current_view != last_view:
+        default_keys = FOCUS_MAP.get(current_view, [])
+        if default_keys:
+            # 最初の要素にフォーカスを当てる
+            window[default_keys[0]].set_focus()
+        last_view = current_view
 
     if event == "-ENTER-":
         focused_element = window.find_element_with_focus()
