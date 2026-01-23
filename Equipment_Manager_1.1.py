@@ -18,7 +18,7 @@ except Exception as e:
 def read_nfc_id():
     GET_UID_COMMAND = [0xFF, 0xCA, 0x00, 0x00, 0x00]
     """NFCカードを最大10回まで検知を試みる。"""
-    for i in range(10):
+    for i in range(100):
         sg.popup_no_buttons(f"タッチしてください...\nPlease touch NFC item...", non_blocking=True, auto_close=True, auto_close_duration=1)
         try:
             r = readers()
@@ -37,7 +37,7 @@ def read_nfc_id():
                     return idm
             except Exception:
                 import time
-                time.sleep(1)
+                time.sleep(0.1)
         except Exception as e:
             custom_popup_ok(f"NFCリーダーエラー: {e}\nNFC reader error: {e}")
             return None
@@ -608,23 +608,24 @@ while True:
                         continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
                     custom_popup_ok(f"社員証を確認しました: { employee_name }\n借りる物品をタッチしてください。\nI checked your employee ID:{ employee_name }\nPlease touch the item you want to borrow.")
                     second_idm = read_nfc_id()  # 物品のIDを読み取る
-                    employee_name = get_employee_name_by_id(idm, employee_ids, E_name)
-                    item_name = get_item_name_by_id(second_idm, item_ids, I_names)
-                    if second_idm in item_ids:
-                        if check_item_borrowed(item_name):
-                            continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
-                        custom_popup_ok(f"物品を確認しました: { item_name }\n返却日を登録してください\nI checked the item: { item_name }\nPlease register the return date.")
-                        calendar_date = calendar(window)
-                        if calendar_date:
-                            appllication_submit(employee_name, item_name, calendar_date)
-                            return_to_main()
-                    elif second_idm in employee_ids:
-                        custom_popup_ok(f"Error:社員証をタッチしています。物品のタッチを行ってください。\nError: You are touching the employee ID. Please touch the item.")
-                    else:
-                        unregistered_idm = idm
-                        window['-VIEW_MAIN-'].update(visible=False)
-                        window['-VIEW_REG_SELECT-'].update(visible=True)
-                        current_view = 'REG_SELECT'
+                    if second_idm:
+                        employee_name = get_employee_name_by_id(idm, employee_ids, E_name)
+                        item_name = get_item_name_by_id(second_idm, item_ids, I_names)
+                        if second_idm in item_ids:
+                            if check_item_borrowed(item_name):
+                                continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
+                            custom_popup_ok(f"物品を確認しました: { item_name }\n返却日を登録してください\nI checked the item: { item_name }\nPlease register the return date.")
+                            calendar_date = calendar(window)
+                            if calendar_date:
+                                appllication_submit(employee_name, item_name, calendar_date)
+                                return_to_main()
+                        elif second_idm in employee_ids:
+                            custom_popup_ok(f"Error:社員証をタッチしています。物品のタッチを行ってください。\nError: You are touching the employee ID. Please touch the item.")
+                        else:
+                            unregistered_idm = second_idm
+                            window['-VIEW_MAIN-'].update(visible=False)
+                            window['-VIEW_REG_SELECT-'].update(visible=True)
+                            current_view = 'REG_SELECT'
                     
 
                 elif idm in item_ids:
@@ -632,23 +633,24 @@ while True:
                         continue  # 返却した場合は以降の処理をスキップしてメインメニューへ
                     custom_popup_ok(f"物品を確認しました: { item_name }\n社員証をタッチしてください。\nI checked the item: { item_name }\nPlease touch your employee ID.")
                     second_idm = read_nfc_id()
-                    employee_name = get_employee_name_by_id(second_idm, employee_ids, E_name)
-                    item_name = get_item_name_by_id(idm, item_ids, I_names)
-                    if second_idm in employee_ids:
+                    if second_idm:
                         employee_name = get_employee_name_by_id(second_idm, employee_ids, E_name)
                         item_name = get_item_name_by_id(idm, item_ids, I_names)
-                        custom_popup_ok(f"社員証を確認しました: { employee_name }\n返却日を登録してください\nI checked your employee ID: { employee_name }\nPlease register the return date.")
-                        calendar_date = calendar(window)
-                        if calendar_date:
-                            appllication_submit(employee_name, item_name, calendar_date)
-                            return_to_main()
-                    elif second_idm in item_ids:
-                        custom_popup_ok(f"Error:物品をタッチしています。社員証のタッチを行ってください。\nError: You are touching the item. Please touch your employee ID.")
-                    else:
-                        unregistered_idm = idm
-                        window['-VIEW_MAIN-'].update(visible=False)
-                        window['-VIEW_REG_SELECT-'].update(visible=True)
-                        current_view = 'REG_SELECT'
+                        if second_idm in employee_ids:
+                            employee_name = get_employee_name_by_id(second_idm, employee_ids, E_name)
+                            item_name = get_item_name_by_id(idm, item_ids, I_names)
+                            custom_popup_ok(f"社員証を確認しました: { employee_name }\n返却日を登録してください\nI checked your employee ID: { employee_name }\nPlease register the return date.")
+                            calendar_date = calendar(window)
+                            if calendar_date:
+                                appllication_submit(employee_name, item_name, calendar_date)
+                                return_to_main()
+                        elif second_idm in item_ids:
+                            custom_popup_ok(f"Error:物品をタッチしています。社員証のタッチを行ってください。\nError: You are touching the item. Please touch your employee ID.")
+                        else:
+                            unregistered_idm = second_idm
+                            window['-VIEW_MAIN-'].update(visible=False)
+                            window['-VIEW_REG_SELECT-'].update(visible=True)
+                            current_view = 'REG_SELECT'
                 else:
                     unregistered_idm = idm
                     window['-VIEW_MAIN-'].update(visible=False)
