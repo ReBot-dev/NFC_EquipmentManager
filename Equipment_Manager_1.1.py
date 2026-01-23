@@ -133,16 +133,18 @@ def calendar(window):
     selected_date = None
     while True:
         event, values = window.read(timeout=10)
-        handle_common_events(event) #文字の色変更とキー操作
+        event = handle_common_events(event) #文字の色変更とキー操作
         if event in (sg.WIN_CLOSED, None):
             break
         if event == "今日まで\nUntil Today":
             selected_date = datetime.now().strftime('%Y-%m-%d')
-            window['-DATE-'].update(selected_date)
+            break
         elif event == "明日まで\nUntil Tomorrow":
             tomorrow = datetime.now() + timedelta(days=1)
             selected_date = tomorrow.strftime('%Y-%m-%d')
-            window['-DATE-'].update(selected_date)
+            break
+        elif event == "カレンダーを選択\nSelect from Calendar":
+            window["カレンダーを選択\nSelect from Calendar"].click()
         elif event == "登録\nRegister":
             if values['-DATE-']:
                 selected_date = values['-DATE-']
@@ -414,7 +416,7 @@ FOCUS_MAP = {
         "登録されている物品一覧を見る\nView Registered Items",
         "返却履歴一覧を見る\nView Returned Items History",
         "登録されている社員一覧を見る\nView Registered Employees",
-        "不具合報告一覧を見る\nView Bug Reports"
+        "不具合報告\nBug Reports"
     ],
     'REG_SELECT': [  # VIEW_ を取って現在の状態名に合わせる
         "社員証として登録\nRegister as employee card",
@@ -439,7 +441,7 @@ layout_main = [
     [sg.Btn("登録されている物品一覧を見る\nView Registered Items", size=(25, 3))],
     [sg.Btn("返却履歴一覧を見る\nView Returned Items History", size=(25, 3))],
     [sg.Btn("登録されている社員一覧を見る\nView Registered Employees", size=(25, 3))],
-    [sg.Btn("不具合報告一覧を見る\nView Bug Reports", size=(25, 3))],]
+    [sg.Btn("不具合報告\nBug Reports", size=(25, 3))],]
 
 layout_register_select = [
     [sg.Txt("未登録のIDです。どちらを登録しますか？\nThis ID is not registered. Which type do you want to register?")],
@@ -670,7 +672,7 @@ while True:
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_ITEM_LIST-'].update(visible=True)
             current_view = 'ITEM_LIST'
-        if event == "不具合報告一覧を見る\nView Bug Reports":
+        if event == "不具合報告\nBug Reports":
             window['-VIEW_MAIN-'].update(visible=False)
             window['-VIEW_BUG_LIST-'].update(visible=True)
             window['-BUG_TABLE-'].update(values=bug_list_data())
